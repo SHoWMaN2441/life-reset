@@ -27,11 +27,22 @@ import { CircadianTimeline } from '@/components/CircadianTimeline';
 import { BreathingExercise } from '@/components/BreathingExercise';
 import { LeaderboardModal } from '@/components/LeaderboardModal';
 import { ProfileView } from '@/components/ProfileView';
-import { Sparkles, Flame, CheckCircle, RefreshCw, Trophy, ArrowRight } from 'lucide-react';
+import { Sparkles, ArrowRight } from 'lucide-react';
 import { sounds } from '@/utils/soundEffects';
+
+// Firebase
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import {
+  saveUserToFirestore,
+  loadUserFromFirestore,
+  saveUserDataField,
+  loadAllUserData
+} from '@/lib/firestore';
 
 export default function Home() {
   const [isClient, setIsClient] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isOnboarding, setIsOnboarding] = useState(false);
@@ -56,56 +67,97 @@ export default function Home() {
   const [isDayCompleteModalOpen, setIsDayCompleteModalOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
 
-  // LocalStorage dan ma'lumotlarni yuklash
+  // Firebase Auth state listener
   useEffect(() => {
     setIsClient(true);
-    const savedUser = localStorage.getItem('lr_user');
-    const savedStats = localStorage.getItem('lr_stats');
-    const savedProtocols = localStorage.getItem('lr_protocols');
-    const savedFoods = localStorage.getItem('lr_foods');
-    const savedBadges = localStorage.getItem('lr_badges');
-    const savedDays = localStorage.getItem('lr_completed_days');
 
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    if (savedStats) {
-      setStats(JSON.parse(savedStats));
-    }
-    if (savedProtocols) {
-      setProtocols(JSON.parse(savedProtocols));
-    }
-    if (savedFoods) {
-      setFoods(JSON.parse(savedFoods));
-    }
-    if (savedBadges) {
-      setBadges(JSON.parse(savedBadges));
-    }
-    if (savedDays) {
-      setCompletedDays(JSON.parse(savedDays));
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in — load data from Firestore
+        try {
+          const savedUser = await loadUserFromFirestore(firebaseUser.uid);
+          if (savedUser) {
+            setUser(savedUser);
+            // Load sub-data
+            const allData = await loadAllUserData(firebaseUser.uid);
+            if (allData) {
+              if (allData.stats) setStats(allData.stats);
+              if (allData.protocols) setProtocols(allData.protocols);
+              if (allData.foods) setFoods(allData.foods);
+              if (allData.badges) setBadges(allData.badges);
+              if (allData.completedDays) setCompletedDays(allData.completedDays);
+              if (typeof allData.waterMl === 'number') setWaterMl(allData.waterMl);
+            }
+          }
+          // If no savedUser => profile hasn't been created yet (new user who didn't finish profile)
+        } catch (e) {
+          console.error('Firestore load error:', e);
+        }
+      } else {
+        // User is signed out
+        setUser(null);
+      }
+      setIsAuthLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const saveUserData = (updatedUser: UserProfile) => {
+  // ─── Save helpers ─────────────────────────────────────────────────────────
+
+  const getUid = (): string | null => auth.currentUser?.uid ?? null;
+
+  const saveUserData = async (updatedUser: UserProfile) => {
     setUser(updatedUser);
-    localStorage.setItem('lr_user', JSON.stringify(updatedUser));
+    const uid = getUid();
+    if (uid) await saveUserToFirestore(uid, updatedUser);
   };
 
-  const saveStatsData = (updatedStats: HexagonStats) => {
+  const saveStatsData = async (updatedStats: HexagonStats) => {
     setStats(updatedStats);
-    localStorage.setItem('lr_stats', JSON.stringify(updatedStats));
+    const uid = getUid();
+    if (uid) await saveUserDataField(uid, 'stats', updatedStats);
   };
 
-  const saveProtocolsData = (updatedProtocols: DailyProtocolItem[]) => {
+  const saveProtocolsData = async (updatedProtocols: DailyProtocolItem[]) => {
     setProtocols(updatedProtocols);
-    localStorage.setItem('lr_protocols', JSON.stringify(updatedProtocols));
+    const uid = getUid();
+    if (uid) await saveUserDataField(uid, 'protocols', updatedProtocols);
   };
 
-  // Auth ro'yxatdan o'tish tugaganda
-  const handleAuthComplete = (profileData: Partial<UserProfile>) => {
+  const saveFoodsData = async (updatedFoods: FoodItem[]) => {
+    setFoods(updatedFoods);
+    const uid = getUid();
+    if (uid) await saveUserDataField(uid, 'foods', updatedFoods);
+  };
+
+  const saveBadgesData = async (updatedBadges: AchievementBadge[]) => {
+    setBadges(updatedBadges);
+    const uid = getUid();
+    if (uid) await saveUserDataField(uid, 'badges', updatedBadges);
+  };
+
+  const saveCompletedDaysData = async (updatedDays: number[]) => {
+    setCompletedDays(updatedDays);
+    const uid = getUid();
+    if (uid) await saveUserDataField(uid, 'completedDays', updatedDays);
+  };
+
+  // ─── Auth Complete Handler ─────────────────────────────────────────────────
+
+  const handleAuthComplete = async (profileData: Partial<UserProfile> | null) => {
+    if (profileData === null) {
+      // Existing user — data already loaded by onAuthStateChanged
+      return;
+    }
+
+    // New user — create full profile and save to Firestore
     sounds.playLevelUp();
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
     const fullUser: UserProfile = {
-      id: 'usr-' + Date.now(),
+      id: uid,
       firstName: profileData.firstName || 'Foydalanuvchi',
       lastName: profileData.lastName || '',
       age: profileData.age || 22,
@@ -125,33 +177,35 @@ export default function Home() {
       joinedAt: new Date().toISOString()
     };
 
-    saveUserData(fullUser);
+    await saveUserData(fullUser);
     setIsOnboarding(true);
   };
 
-  // Onboarding yakunlanganda
-  const handleOnboardingFinish = (newStats: HexagonStats, selectedGoal: string, answers: any) => {
+  // ─── Onboarding finish ────────────────────────────────────────────────────
+
+  const handleOnboardingFinish = async (newStats: HexagonStats, selectedGoal: string, answers: unknown) => {
     if (!user) return;
 
     sounds.playLevelUp();
-    saveStatsData(newStats);
+    await saveStatsData(newStats);
 
     const goalKey = selectedGoal in DEFAULT_DAILY_PROTOCOLS ? selectedGoal : 'barchasi';
     const initialProtocols = DEFAULT_DAILY_PROTOCOLS[goalKey] || DEFAULT_DAILY_PROTOCOLS.barchasi;
 
-    saveProtocolsData(initialProtocols);
+    await saveProtocolsData(initialProtocols);
 
     const updatedUser: UserProfile = {
       ...user,
-      primaryGoal: selectedGoal as any,
+      primaryGoal: selectedGoal as UserProfile['primaryGoal'],
       xp: user.xp + 150
     };
-    saveUserData(updatedUser);
+    await saveUserData(updatedUser);
     setIsOnboarding(false);
   };
 
-  // Protokol checkbox bosilganda
-  const handleToggleProtocol = (id: string) => {
+  // ─── Protocol handlers ────────────────────────────────────────────────────
+
+  const handleToggleProtocol = async (id: string) => {
     if (!user) return;
     const updated = protocols.map(p => {
       if (p.id === id) {
@@ -169,52 +223,52 @@ export default function Home() {
       return p;
     });
 
-    saveProtocolsData(updated);
+    await saveProtocolsData(updated);
   };
 
-  const handleAddProtocol = (item: DailyProtocolItem) => {
+  const handleAddProtocol = async (item: DailyProtocolItem) => {
     const updated = [item, ...protocols];
-    saveProtocolsData(updated);
+    await saveProtocolsData(updated);
   };
 
-  const handleDeleteProtocol = (id: string) => {
+  const handleDeleteProtocol = async (id: string) => {
     sounds.playClick();
     const updated = protocols.filter(p => p.id !== id);
-    saveProtocolsData(updated);
+    await saveProtocolsData(updated);
   };
 
-  // Ovqat qo'shish
-  const handleAddFood = (item: FoodItem) => {
-    const updated = [item, ...foods];
-    setFoods(updated);
-    localStorage.setItem('lr_foods', JSON.stringify(updated));
+  // ─── Food handlers ────────────────────────────────────────────────────────
 
+  const handleAddFood = async (item: FoodItem) => {
+    const updated = [item, ...foods];
+    await saveFoodsData(updated);
     if (user) {
-      saveUserData({ ...user, xp: user.xp + 25 });
+      await saveUserData({ ...user, xp: user.xp + 25 });
     }
   };
 
-  const handleRemoveFood = (id: string) => {
+  const handleRemoveFood = async (id: string) => {
     sounds.playClick();
     const updated = foods.filter(f => f.id !== id);
-    setFoods(updated);
-    localStorage.setItem('lr_foods', JSON.stringify(updated));
+    await saveFoodsData(updated);
   };
 
-  // Kunni yakunlab keyingi kunga o'tish
-  const handleAdvanceToNextDay = () => {
+  // ─── Day advance ──────────────────────────────────────────────────────────
+
+  const handleAdvanceToNextDay = async () => {
     if (!user) return;
 
     const nextDay = user.dayNumber + 1;
     const updatedDays = Array.from(new Set([...completedDays, user.dayNumber]));
-    setCompletedDays(updatedDays);
-    localStorage.setItem('lr_completed_days', JSON.stringify(updatedDays));
+    await saveCompletedDaysData(updatedDays);
 
     const resetProtocols = protocols.map(p => ({ ...p, completed: false }));
-    saveProtocolsData(resetProtocols);
+    await saveProtocolsData(resetProtocols);
 
-    setFoods([]);
+    await saveFoodsData([]);
     setWaterMl(0);
+    const uid = getUid();
+    if (uid) await saveUserDataField(uid, 'waterMl', 0);
 
     const updatedUser: UserProfile = {
       ...user,
@@ -222,39 +276,71 @@ export default function Home() {
       streak: user.streak + 1,
       xp: user.xp + 250
     };
-    saveUserData(updatedUser);
+    await saveUserData(updatedUser);
     setIsDayCompleteModalOpen(false);
   };
 
-  // Qayta reset qilish
-  const handleFullReset = () => {
+  // ─── Sign out ─────────────────────────────────────────────────────────────
+
+  const handleSignOut = async () => {
     sounds.playClick();
-    if (confirm("Haqiqatan ham barcha ma'lumotlarni tozalab qaytadan boshlamoqchimisiz?")) {
-      localStorage.clear();
-      window.location.reload();
+    try {
+      await signOut(auth);
+      // Reset all local state
+      setUser(null);
+      setStats({ tana: 50, aql: 50, intizom: 45, ruhiyat: 55, moliya: 45, odatlar: 40 });
+      setProtocols([]);
+      setFoods([]);
+      setBadges(INITIAL_BADGES);
+      setCompletedDays([1]);
+      setWaterMl(1250);
+      setIsOnboarding(false);
+      setActiveTab('dashboard');
+    } catch (e) {
+      console.error('Sign out error:', e);
     }
   };
 
-  if (!isClient) {
-    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Yuklanmoqda...</div>;
+  // ─── Full reset ───────────────────────────────────────────────────────────
+
+  const handleFullReset = async () => {
+    sounds.playClick();
+    if (confirm("Haqiqatan ham barcha ma'lumotlarni tozalab qaytadan boshlamoqchimisiz?")) {
+      await handleSignOut();
+    }
+  };
+
+  // ─── Loading states ───────────────────────────────────────────────────────
+
+  if (!isClient || isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 shadow-lg mb-2">
+            <Sparkles className="w-7 h-7 text-white animate-pulse" />
+          </div>
+          <p className="text-neutral-400 text-sm">Yuklanmoqda...</p>
+        </div>
+      </div>
+    );
   }
 
-  // 1. Agar foydalanuvchi hali ro'yxatdan o'tmagan bo'lsa
+  // 1. Not authenticated yet
   if (!user) {
     return <AuthModal isOpen={true} onComplete={handleAuthComplete} />;
   }
 
-  // 2. Agar foydalanuvchi savollar (Onboarding) bosqichida bo'lsa
+  // 2. Onboarding
   if (isOnboarding) {
     return <OnboardingFlow user={user} onFinish={handleOnboardingFinish} />;
   }
 
-  // 3. Asosiy Dashboard
+  // 3. Main Dashboard
   const randomQuote = MOTIVATIONAL_QUOTES[0];
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-emerald-500 selection:text-black">
-      {/* Yuqori Navbar & Tab Navigatsiya */}
+      {/* Navbar */}
       <Navbar
         user={user}
         activeTab={activeTab}
@@ -263,13 +349,14 @@ export default function Home() {
         onOpenShare={() => setIsShareOpen(true)}
         onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
         onResetProgram={handleFullReset}
+        onSignOut={handleSignOut}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* TAB 1: BUGUNGI KUN (DASHBOARD) */}
+        {/* TAB 1: DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
-            {/* Motivatsion banner */}
+            {/* Motivational banner */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-neutral-900 via-neutral-900 to-neutral-950 border border-neutral-800 p-6 sm:p-8 shadow-2xl">
               <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -311,7 +398,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Kunlik Protokol va Sirkadian Ritm */}
+            {/* Daily Protocol + Circadian */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               <div className="lg:col-span-8">
                 <DailyProtocol
@@ -328,19 +415,22 @@ export default function Home() {
                 <WaterTracker
                   currentMl={waterMl}
                   goalMl={user.waterGoal || 2500}
-                  onUpdate={(val) => setWaterMl(val)}
+                  onUpdate={(val) => {
+                    setWaterMl(val);
+                    const uid = getUid();
+                    if (uid) saveUserDataField(uid, 'waterMl', val);
+                  }}
                 />
-
                 <JournalReflection />
               </div>
             </div>
 
-            {/* 24 Soatlik Biologik Ritm */}
+            {/* 24h Circadian */}
             <CircadianTimeline />
           </div>
         )}
 
-        {/* TAB 2: AI OZIQLANISH (NUTRITION) */}
+        {/* TAB 2: NUTRITION */}
         {activeTab === 'nutrition' && (
           <div className="space-y-8">
             <CalorieAICalculator
@@ -352,7 +442,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* TAB 3: SPORT REJASI (WORKOUT) */}
+        {/* TAB 3: WORKOUT */}
         {activeTab === 'workout' && (
           <div className="space-y-8">
             <WorkoutPlanner
@@ -363,7 +453,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* TAB 4: AQL VA FOKUS (MIND & RECOVERY) */}
+        {/* TAB 4: MIND & FOCUS */}
         {activeTab === 'mind' && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -388,7 +478,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* TAB 5: PROFIL VA 6 BURCHAKLI ANALITIKA (PROFILE) */}
+        {/* TAB 5: PROFILE */}
         {activeTab === 'profile' && (
           <ProfileView
             user={user}
@@ -400,14 +490,14 @@ export default function Home() {
         )}
       </main>
 
-      {/* AI Hayot Murabbiyi (Chat) Modali */}
+      {/* AI Coach Modal */}
       <AICoachModal
         isOpen={isCoachOpen}
         onClose={() => setIsCoachOpen(false)}
         user={user}
       />
 
-      {/* Story Share Modali */}
+      {/* Story Share Modal */}
       <StoryShareCard
         isOpen={isShareOpen}
         onClose={() => setIsShareOpen(false)}
@@ -415,7 +505,7 @@ export default function Home() {
         stats={stats}
       />
 
-      {/* Kunni Yakunlash Modali */}
+      {/* Day Completion Modal */}
       <DayCompletionModal
         isOpen={isDayCompleteModalOpen}
         dayNumber={user.dayNumber}
@@ -424,7 +514,7 @@ export default function Home() {
         onClose={() => setIsDayCompleteModalOpen(false)}
       />
 
-      {/* Peshqadamlar Jadvali (Leaderboard) Modali */}
+      {/* Leaderboard Modal */}
       <LeaderboardModal
         isOpen={isLeaderboardOpen}
         onClose={() => setIsLeaderboardOpen(false)}

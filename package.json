@@ -9,12 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "canvas-confetti": "^1.9.4",
+    "firebase": "^13.1.0",
     "framer-motion": "^12.4.7",
     "lucide-react": "^1.16.0",
-    "canvas-confetti": "^1.9.4"
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

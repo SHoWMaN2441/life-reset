@@ -12,7 +12,8 @@ import {
   Utensils,
   Dumbbell,
   Brain,
-  UserCircle
+  UserCircle,
+  LogOut
 } from 'lucide-react';
 import { UserProfile } from '@/types';
 import { sounds } from '@/utils/soundEffects';
@@ -27,6 +28,7 @@ interface NavbarProps {
   onOpenShare: () => void;
   onOpenLeaderboard?: () => void;
   onResetProgram?: () => void;
+  onSignOut?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -36,7 +38,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCoach,
   onOpenShare,
   onOpenLeaderboard,
-  onResetProgram
+  onResetProgram,
+  onSignOut
 }) => {
   const tabs = [
     { id: 'dashboard' as ActiveTab, label: 'Bugungi Kun', icon: LayoutDashboard },
@@ -156,6 +159,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {user.firstName[0]}{user.lastName ? user.lastName[0] : ''}
               </div>
             </button>
+
+            {/* Chiqish tugmasi */}
+            {onSignOut && (
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  onSignOut();
+                }}
+                className="p-2 rounded-xl bg-neutral-900 hover:bg-red-500/10 border border-neutral-800 hover:border-red-500/30 text-neutral-400 hover:text-red-400 cursor-pointer transition-colors"
+                title="Chiqish"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
