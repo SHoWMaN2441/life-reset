@@ -407,7 +407,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onComplete }) => {
                   <button
                     onClick={handleGoogleSignIn}
                     disabled={isLoading}
-                    className="w-full py-3 px-4 bg-neutral-950/70 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900 text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-all transform active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                    className="w-full py-3 px-4 bg-neutral-950/70 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900 text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-all transform active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed text-sm cursor-pointer"
                   >
                     {/* Google "G" icon */}
                     <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -418,6 +418,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onComplete }) => {
                     </svg>
                     <span>Google orqali kirish</span>
                   </button>
+
+                  {/* Guest demo mode button */}
+                  <div className="pt-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowProfileForm(true)}
+                      className="text-xs text-neutral-400 hover:text-emerald-400 transition-colors underline cursor-pointer"
+                    >
+                      Profilni to'g'ridan-to'g'ri to'ldirib boshlash
+                    </button>
+                  </div>
                 </motion.div>
               </AnimatePresence>
             </>

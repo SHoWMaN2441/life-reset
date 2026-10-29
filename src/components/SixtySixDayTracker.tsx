@@ -20,11 +20,19 @@ export const SixtySixDayTracker: React.FC<SixtySixDayTrackerProps> = ({
   onDayClick
 }) => {
   const [selectedDay, setSelectedDay] = useState<number>(currentDay);
+  const [activePhaseFilter, setActivePhaseFilter] = useState<number>(0); // 0 = all, 1, 2, 3
 
   const getDayPhase = (day: number) => {
     if (day <= 22) return 1;
     if (day <= 44) return 2;
     return 3;
+  };
+
+  const getFilteredDays = () => {
+    if (activePhaseFilter === 1) return Array.from({ length: 22 }, (_, i) => i + 1);
+    if (activePhaseFilter === 2) return Array.from({ length: 22 }, (_, i) => i + 23);
+    if (activePhaseFilter === 3) return Array.from({ length: 22 }, (_, i) => i + 45);
+    return Array.from({ length: 66 }, (_, i) => i + 1);
   };
 
   const getDayStatusColor = (day: number) => {
@@ -76,22 +84,45 @@ export const SixtySixDayTracker: React.FC<SixtySixDayTrackerProps> = ({
         </div>
       </div>
 
-      {/* Fazalar tabs indikatori */}
+      {/* Fazalar tabs indikatori va Pagination filter */}
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          onClick={() => {
+            sounds.playClick();
+            setActivePhaseFilter(0);
+          }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activePhaseFilter === 0
+              ? 'bg-neutral-200 text-black shadow-md'
+              : 'bg-neutral-950/60 border border-neutral-800 text-neutral-400 hover:text-white'
+          }`}
+        >
+          Barcha kunlar (1 - 66)
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6 select-none">
         {SIXTY_SIX_PHASES.map((p) => {
-          const isActive = getDayPhase(selectedDay) === p.phase;
+          const isSelectedFilter = activePhaseFilter === p.phase;
+          const isCurrentPhase = getDayPhase(selectedDay) === p.phase;
           return (
             <div
               key={p.phase}
-              className={`p-3.5 rounded-2xl border transition-all ${
-                isActive
+              onClick={() => {
+                sounds.playClick();
+                setActivePhaseFilter(isSelectedFilter ? 0 : p.phase);
+              }}
+              className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                isSelectedFilter
+                  ? `${p.bgColor} ring-2 ring-emerald-400 scale-[1.02]`
+                  : isCurrentPhase
                   ? `${p.bgColor} ring-1 ring-white/20`
-                  : 'bg-neutral-950/50 border-neutral-800/80 text-neutral-400'
+                  : 'bg-neutral-950/50 border-neutral-800/80 text-neutral-400 hover:border-neutral-700'
               }`}
             >
               <div className="flex items-center justify-between text-[11px] font-bold mb-1">
                 <span>FAZA {p.phase}</span>
-                <span>{p.days}</span>
+                <span className="text-[10px] bg-black/40 px-2 py-0.5 rounded-full">{p.days}</span>
               </div>
               <div className="text-xs font-black text-white truncate">
                 {p.title.split(' (')[0]}
@@ -101,10 +132,9 @@ export const SixtySixDayTracker: React.FC<SixtySixDayTrackerProps> = ({
         })}
       </div>
 
-      {/* 66 ta kun katakchasi (1 dan 66 gacha to'r) */}
+      {/* Tanlangan faza kunlari (To'r) */}
       <div className="grid grid-cols-6 sm:grid-cols-11 gap-2 mb-6 select-none">
-        {Array.from({ length: 66 }).map((_, idx) => {
-          const day = idx + 1;
+        {getFilteredDays().map((day) => {
           const isSelected = selectedDay === day;
           return (
             <button

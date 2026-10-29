@@ -1,74 +1,86 @@
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db } from './firebase';
 import { UserProfile, HexagonStats, DailyProtocolItem, FoodItem, AchievementBadge } from '@/types';
 
-type DataField = 'stats' | 'protocols' | 'foods' | 'badges' | 'completedDays' | 'waterMl';
-
-type FieldValueMap = {
+export interface UserFullData {
+  user: UserProfile;
   stats: HexagonStats;
   protocols: DailyProtocolItem[];
   foods: FoodItem[];
   badges: AchievementBadge[];
   completedDays: number[];
   waterMl: number;
-};
-
-const getUserDocRef = (uid: string) => doc(db, 'users', uid, 'data', 'main');
-const getUserProfileRef = (uid: string) => doc(db, 'users', uid);
-
-/**
- * Saves the full UserProfile to Firestore at users/{uid}
- */
-export async function saveUserToFirestore(uid: string, data: UserProfile): Promise<void> {
-  await setDoc(getUserProfileRef(uid), data, { merge: true });
+  updatedAt?: string;
 }
 
 /**
- * Loads the UserProfile from Firestore at users/{uid}
+ * Foydalanuvchining to'liq profilini Firestore'ga saqlash
+ */
+export async function saveUserToFirestore(uid: string, profile: UserProfile): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, { profile, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (error) {
+    console.error("Firestore'ga profilni saqlashda xatolik:", error);
+  }
+}
+
+/**
+ * Foydalanuvchi profilini Firestore'dan olish
  */
 export async function loadUserFromFirestore(uid: string): Promise<UserProfile | null> {
-  const snap = await getDoc(getUserProfileRef(uid));
-  if (snap.exists()) {
-    return snap.data() as UserProfile;
+  try {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      return (data.profile as UserProfile) || null;
+    }
+    return null;
+  } catch (error) {
+    console.error("Firestore'dan profilni yuklashda xatolik:", error);
+    return null;
   }
-  return null;
 }
 
 /**
- * Saves a specific data field to users/{uid}/data/main
+ * Foydalanuvchining ma'lum bir bo'lim ma'lumotini saqlash (stats, protocols, foods, badges, va h.k.)
  */
-export async function saveUserDataField<K extends DataField>(
+export async function saveUserDataField<K extends keyof Omit<UserFullData, 'user'>>(
   uid: string,
   field: K,
-  value: FieldValueMap[K]
+  value: UserFullData[K]
 ): Promise<void> {
-  await setDoc(getUserDocRef(uid), { [field]: value }, { merge: true });
+  try {
+    const dataRef = doc(db, 'users', uid, 'data', 'main');
+    await setDoc(
+      dataRef,
+      {
+        [field]: value,
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(`Firestore'ga ${field} saqlashda xatolik:`, error);
+  }
 }
 
 /**
- * Loads a specific data field from users/{uid}/data/main
+ * Foydalanuvchining barcha qo'shimcha ma'lumotlarini (stats, protocols, foods...) Firestore'dan yuklash
  */
-export async function loadUserDataField<K extends DataField>(
-  uid: string,
-  field: K
-): Promise<FieldValueMap[K] | null> {
-  const snap = await getDoc(getUserDocRef(uid));
-  if (snap.exists()) {
-    const data = snap.data();
-    if (field in data) {
-      return data[field] as FieldValueMap[K];
+export async function loadAllUserData(uid: string): Promise<Partial<UserFullData> | null> {
+  try {
+    const dataRef = doc(db, 'users', uid, 'data', 'main');
+    const snap = await getDoc(dataRef);
+    if (snap.exists()) {
+      return snap.data() as Partial<UserFullData>;
     }
+    return null;
+  } catch (error) {
+    console.error("Firestore'dan ilova ma'lumotlarini yuklashda xatolik:", error);
+    return null;
   }
-  return null;
 }
 
-/**
- * Loads all user data fields from users/{uid}/data/main
- */
-export async function loadAllUserData(uid: string): Promise<Partial<FieldValueMap> | null> {
-  const snap = await getDoc(getUserDocRef(uid));
-  if (snap.exists()) {
-    return snap.data() as Partial<FieldValueMap>;
-  }
-  return null;
-}
+export const loadUserAppData = loadAllUserData;

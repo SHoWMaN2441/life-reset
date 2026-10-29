@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FoodItem, UserProfile } from '@/types';
-import { Utensils, Sparkles, Flame, Plus, Trash2, CheckCircle, Apple, AlertCircle, ChefHat } from 'lucide-react';
+import { Utensils, Sparkles, Flame, Plus, Trash2, CheckCircle, Apple, AlertCircle, ChefHat, ChevronLeft, ChevronRight } from 'lucide-react';
 import { sounds } from '@/utils/soundEffects';
 
 interface CalorieAICalculatorProps {
@@ -23,6 +23,12 @@ export const CalorieAICalculator: React.FC<CalorieAICalculatorProps> = ({
   const [selectedMealType, setSelectedMealType] = useState<'nonushta' | 'tushlik' | 'kechki' | 'snack'>('nonushta');
   const [isLoading, setIsLoading] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
+
+  const [foodPage, setFoodPage] = useState(1);
+  const foodsPerPage = 5;
+  const totalFoodPages = Math.max(1, Math.ceil(foods.length / foodsPerPage));
+  const currentFoodPage = Math.min(foodPage, totalFoodPages);
+  const paginatedFoods = foods.slice((currentFoodPage - 1) * foodsPerPage, currentFoodPage * foodsPerPage);
 
   // AI Menyu taklifi
   const [generatedMenu, setGeneratedMenu] = useState<any | null>(null);
@@ -367,9 +373,16 @@ export const CalorieAICalculator: React.FC<CalorieAICalculatorProps> = ({
 
       {/* Bugungi iste'mol qilingan taomlar ro'yxati */}
       <div>
-        <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-3">
-          Bugungi kiritilgan taomlar ({foods.length}):
-        </h4>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
+            Bugungi kiritilgan taomlar ({foods.length}):
+          </h4>
+          {foods.length > foodsPerPage && (
+            <span className="text-[11px] text-neutral-400">
+              Sahifa {currentFoodPage} / {totalFoodPages}
+            </span>
+          )}
+        </div>
 
         {foods.length === 0 ? (
           <div className="text-center py-8 text-neutral-500 text-xs border border-dashed border-neutral-800/80 rounded-2xl">
@@ -377,7 +390,7 @@ export const CalorieAICalculator: React.FC<CalorieAICalculatorProps> = ({
           </div>
         ) : (
           <div className="space-y-2">
-            {foods.map((food) => (
+            {paginatedFoods.map((food) => (
               <div
                 key={food.id}
                 className="p-3 rounded-xl bg-neutral-950/60 border border-neutral-800/80 flex items-center justify-between text-xs"
@@ -399,12 +412,68 @@ export const CalorieAICalculator: React.FC<CalorieAICalculatorProps> = ({
 
                 <button
                   onClick={() => onRemoveFood(food.id)}
-                  className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors"
+                  className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             ))}
+
+            {/* Pagination Controls */}
+            {foods.length > foodsPerPage && (
+              <div className="flex items-center justify-between pt-3 mt-2 border-t border-neutral-800/60">
+                <span className="text-[11px] text-neutral-400">
+                  {((currentFoodPage - 1) * foodsPerPage) + 1} - {Math.min(currentFoodPage * foodsPerPage, foods.length)} dan {foods.length} ta
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sounds.playClick();
+                      setFoodPage(Math.max(1, currentFoodPage - 1));
+                    }}
+                    disabled={currentFoodPage === 1}
+                    className="p-1.5 rounded-lg bg-neutral-950 border border-neutral-800 hover:border-neutral-700 disabled:opacity-30 text-white cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  {Array.from({ length: totalFoodPages }).map((_, idx) => {
+                    const p = idx + 1;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          sounds.playClick();
+                          setFoodPage(p);
+                        }}
+                        className={`w-6 h-6 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                          currentFoodPage === p
+                            ? 'bg-emerald-500 text-black shadow-sm'
+                            : 'bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-white'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sounds.playClick();
+                      setFoodPage(Math.min(totalFoodPages, currentFoodPage + 1));
+                    }}
+                    disabled={currentFoodPage === totalFoodPages}
+                    className="p-1.5 rounded-lg bg-neutral-950 border border-neutral-800 hover:border-neutral-700 disabled:opacity-30 text-white cursor-pointer"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

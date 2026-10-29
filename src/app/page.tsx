@@ -27,7 +27,7 @@ import { CircadianTimeline } from '@/components/CircadianTimeline';
 import { BreathingExercise } from '@/components/BreathingExercise';
 import { LeaderboardModal } from '@/components/LeaderboardModal';
 import { ProfileView } from '@/components/ProfileView';
-import { Sparkles, ArrowRight } from 'lucide-react';
+import { Sparkles, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { sounds } from '@/utils/soundEffects';
 
 // Firebase
@@ -147,14 +147,30 @@ export default function Home() {
 
   const handleAuthComplete = async (profileData: Partial<UserProfile> | null) => {
     if (profileData === null) {
-      // Existing user — data already loaded by onAuthStateChanged
+      // Existing user — check if already loaded or reload from Firestore
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        const saved = await loadUserFromFirestore(uid);
+        if (saved) {
+          setUser(saved);
+          const allData = await loadAllUserData(uid);
+          if (allData) {
+            if (allData.stats) setStats(allData.stats);
+            if (allData.protocols) setProtocols(allData.protocols);
+            if (allData.foods) setFoods(allData.foods);
+            if (allData.badges) setBadges(allData.badges);
+            if (allData.completedDays) setCompletedDays(allData.completedDays);
+            if (typeof allData.waterMl === 'number') setWaterMl(allData.waterMl);
+          }
+          return;
+        }
+      }
       return;
     }
 
     // New user — create full profile and save to Firestore
     sounds.playLevelUp();
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+    const uid = auth.currentUser?.uid || 'usr-' + Date.now();
 
     const fullUser: UserProfile = {
       id: uid,
@@ -488,6 +504,83 @@ export default function Home() {
             onUpdateUser={(updated) => saveUserData(updated)}
           />
         )}
+
+        {/* Sahifalar o'rtasida To'liq Pagination va Navigatsiya */}
+        {(() => {
+          const tabOrder: { id: ActiveTab; label: string }[] = [
+            { id: 'dashboard', label: 'Bugungi Kun' },
+            { id: 'nutrition', label: 'AI Oziqlanish' },
+            { id: 'workout', label: 'Sport Rejasi' },
+            { id: 'mind', label: 'Aql & Fokus' },
+            { id: 'profile', label: 'Profil & Analitika' }
+          ];
+          const currentIndex = tabOrder.findIndex(t => t.id === activeTab);
+          const prevTab = currentIndex > 0 ? tabOrder[currentIndex - 1] : null;
+          const nextTab = currentIndex < tabOrder.length - 1 ? tabOrder[currentIndex + 1] : null;
+
+          return (
+            <div className="pt-8 border-t border-neutral-900 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+              <div className="flex items-center gap-2">
+                {prevTab ? (
+                  <button
+                    onClick={() => {
+                      sounds.playClick();
+                      setActiveTab(prevTab.id);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-emerald-400" />
+                    <span>Oldingi: <strong className="text-white">{prevTab.label}</strong></span>
+                  </button>
+                ) : (
+                  <div className="hidden sm:block" />
+                )}
+              </div>
+
+              {/* Sahifa indikatorlari */}
+              <div className="flex items-center gap-2">
+                {tabOrder.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      sounds.playClick();
+                      setActiveTab(tab.id);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      activeTab === tab.id
+                        ? 'w-8 bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                        : 'w-2 bg-neutral-800 hover:bg-neutral-700'
+                    }`}
+                    title={tab.label}
+                  />
+                ))}
+                <span className="text-[11px] text-neutral-500 font-mono ml-1">
+                  {currentIndex + 1} / {tabOrder.length}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {nextTab ? (
+                  <button
+                    onClick={() => {
+                      sounds.playClick();
+                      setActiveTab(nextTab.id);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-black text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-500/20 cursor-pointer transition-all active:scale-95"
+                  >
+                    <span>Keyingi: <strong>{nextTab.label}</strong></span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <div className="hidden sm:block" />
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </main>
 
       {/* AI Coach Modal */}
